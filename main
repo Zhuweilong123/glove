@@ -1,0 +1,73 @@
+# -*- coding: utf-8 -*-
+# @Time    : 2021/9/29 11:01
+# @Author  : zhaoxinchao
+# @FileName: 数据预处理.py
+# @Software: PyCharm
+import pandas as pd
+import sys
+from utils import *
+
+
+def train():
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, enable=True)
+    except:
+        with AttributeError as e:
+            print(e)
+
+    word_file_path = "glove.6B.50d.txt"
+    # load the pretrained word vector
+    word_to_index, index_to_word, word_to_vec_map, index_to_vec_map = read_word_map(word_file_path)
+
+
+    # # print(word_to_index["8"])
+    data_file_path = "train_data.csv"
+    train_x, train_y = load_data_set(train_file_path=data_file_path,
+                                     word_vector_map=word_to_vec_map)
+    # np.save("train_x.npy", train_x)
+    # np.save("train_y.npy", train_y)
+    #
+    # train_x = np.load("train_x.npy")
+    # train_y = np.load("train_y.npy")
+    print("train_x.shape", train_x.shape)
+    print("train_y,shape", train_y.shape)
+
+    batch_size = 10000
+    learning_rate = 0.01
+    epochs = 20
+    model = UEBA_model(input_shape=(train_x.shape[1], train_x.shape[2]))
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    model.compile(optimizer, loss=root_mean_squared_error, metrics=tf.keras.losses.MSE)
+    model.summary()
+    model.fit(x=train_x, y=train_y, batch_size=batch_size, epochs=epochs, shuffle=True)
+    tf.keras.models.save_model(model, "../model/UEBA_model.h5")
+    return
+
+
+def run(test_file, submission):
+    word_file_path = "glove.6B.50d.txt"
+    # load the pretrained word vector
+    word_to_index, index_to_word, word_to_vec_map, index_to_vec_map = read_word_map(word_file_path)
+    test_x, test_y = load_data_set(test_file, word_to_vec_map)
+    model = tf.keras.models.load_model("../model/UEBA_model.h5", compile=False)
+    test_outputs = model.predict(x=test_x)
+    id = []
+    ret = []
+    for i in range(test_outputs.shape[0]):
+        id.append(i+1)
+        ret.append(round(test_outputs[i][0], 4))
+    df = pd.DataFrame({'id': id,
+                       'ret': ret})
+    df.to_csv(submission, index=None, encoding="utf-8", float_format="%.4f")
+
+
+if __name__ == '__main__':
+    args = sys.argv[1:]
+    if len(args) != 2:
+        print('argument has error,' + str(len(args)) + ' not equal 2')
+        print(args)
+    else:
+        run(args[0], args[1])
+
